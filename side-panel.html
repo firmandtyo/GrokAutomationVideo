@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grok Automation</title>
+  <style>
+    :root {
+      --bg: #0e0e0f;
+      --bg2: #1a1a1c;
+      --bg3: #242426;
+      --border: #2e2e32;
+      --accent: #00d26a;
+      --accent2: #00b359;
+      --text: #e8e8ea;
+      --text2: #9090a0;
+      --text3: #606070;
+      --danger: #ff4545;
+      --warning: #f5a623;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      width: 100%;
+      min-height: 100vh;
+      font-size: 13px;
+      overflow-x: hidden;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .logo-wrap {
+      width: 32px; height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #000; flex-shrink: 0;
+    }
+    .header-title { font-weight: 700; font-size: 14px; }
+    .badge {
+      background: var(--accent);
+      color: #000;
+      font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 4px;
+    }
+    .header-sub { font-size: 11px; color: var(--text2); }
+    .header-meta {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--text2);
+    }
+    .author-link { color: var(--accent); text-decoration: none; }
+    .author-link:hover { text-decoration: underline; }
+    .lang-select {
+      margin-left: auto;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text); border-radius: var(--radius-sm);
+      padding: 3px 8px; font-size: 11px; cursor: pointer;
+    }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 14px;
+      gap: 2px;
+    }
+    .tab {
+      padding: 9px 14px;
+      font-size: 12px; font-weight: 500;
+      color: var(--text2);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      display: flex; align-items: center; gap: 5px;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-icon { font-size: 13px; }
+
+    /* ── CONTENT PANEL ── */
+    .panel { display: none; padding: 14px; flex-direction: column; gap: 12px; }
+    .panel.active { display: flex; }
+
+    /* ── MODE BUTTONS ── */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    .mode-btn {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: var(--radius);
+      padding: 10px 8px;
+      cursor: pointer;
+      font-size: 11.5px; font-weight: 500;
+      text-align: center;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 5px;
+      transition: all .15s;
+      line-height: 1.3;
+    }
+    .mode-btn .mode-icon { font-size: 18px; }
+    .mode-btn:hover { border-color: var(--accent2); color: var(--text); }
+    .mode-btn.active {
+      background: rgba(0, 210, 106, 0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .mode-row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    /* ── SECTION CARD ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .card-row { display: flex; gap: 8px; }
+    .card-half { flex: 1; }
+
+    .label {
+      font-size: 11px; font-weight: 600;
+      color: var(--text2);
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .label-icon { font-size: 13px; }
+    .label-desc { font-size: 10px; color: var(--text3); margin-top: 3px; line-height: 1.4; }
+
+    /* ── SELECT / INPUT ── */
+    select, input[type="number"], textarea {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+      font-size: 12px;
+      width: 100%;
+      transition: border-color .15s;
+    }
+    select:focus, input:focus, textarea:focus {
+      outline: none; border-color: var(--accent);
+    }
+    select { cursor: pointer; -webkit-appearance: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239090a0'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      padding-right: 24px;
+    }
+
+    /* ── DELAY RANGE ── */
+    .delay-wrap { display: flex; align-items: center; gap: 6px; }
+    .delay-wrap input { flex: 1; }
+    .delay-sep { color: var(--text3); font-size: 14px; flex-shrink: 0; }
+
+    /* ── TEXTAREA PROMPTS ── */
+    .prompts-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .prompts-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text2); border-radius: var(--radius-sm);
+      padding: 4px 8px; cursor: pointer; font-size: 13px;
+      transition: all .15s;
+    }
+    .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+    textarea {
+      resize: vertical; min-height: 110px;
+      font-family: inherit; line-height: 1.6;
+      color: var(--text);
+    }
+    textarea::placeholder { color: var(--text3); }
+    .prompt-hint { font-size: 10px; color: var(--text3); margin-top: 4px; font-style: italic; }
+
+    /* ── FOLDER ── */
+    .folder-wrap { display: flex; gap: 6px; }
+    .folder-wrap input { flex: 1; }
+    .folder-btn {
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text2); border-radius: var(--radius-sm);
+      padding: 7px 10px; cursor: pointer; font-size: 13px;
+      white-space: nowrap; transition: all .15s;
+    }
+    .folder-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── START BUTTON ── */
+    .start-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 14px; font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      letter-spacing: 0.3px;
+    }
+    .start-btn.idle {
+      background: var(--accent);
+      color: #000;
+      box-shadow: 0 0 20px rgba(0,210,106,0.3);
+    }
+    .start-btn.idle:hover {
+      background: var(--accent2);
+      box-shadow: 0 0 28px rgba(0,210,106,0.5);
+      transform: translateY(-1px);
+    }
+    .start-btn.running {
+      background: var(--danger);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(255,69,69,0.3);
+    }
+    .start-btn.running:hover { background: #cc2929; }
+
+    /* ── PROGRESS ── */
+    .progress-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px;
+      display: none;
+    }
+    .progress-card.visible { display: block; }
+    .progress-bar-wrap {
+      background: var(--bg3); border-radius: 99px;
+      height: 6px; overflow: hidden; margin: 8px 0 6px;
+    }
+    .progress-bar {
+      height: 100%; background: var(--accent);
+      border-radius: 99px; transition: width .4s ease;
+      width: 0%;
+    }
+    .progress-label { font-size: 11px; color: var(--text2); }
+    .progress-stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); }
+
+    /* ── STATUS INDICATOR ── */
+    .status-row {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 6px;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text3);
+      flex-shrink: 0;
+    }
+    .status-dot.green { background: var(--accent); animation: pulse 1.5s infinite; }
+    .status-dot.red { background: var(--danger); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+    .status-text { font-size: 11px; color: var(--text2); }
+
+    /* ── DEBUG LOGS ── */
+    .log-box {
+      background: #0a0a0b; border: 1px solid var(--border);
+      border-radius: var(--radius);
+      height: 320px; overflow-y: auto;
+      padding: 10px; font-family: 'Consolas', monospace; font-size: 11px;
+      line-height: 1.7;
+    }
+    .log-entry { display: flex; gap: 8px; }
+    .log-time { color: var(--text3); flex-shrink: 0; }
+    .log-info { color: #60a0ff; }
+    .log-success { color: var(--accent); }
+    .log-warn { color: var(--warning); }
+    .log-error { color: var(--danger); }
+    .log-controls { display: flex; gap: 6px; }
+    .log-controls button {
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text2); border-radius: var(--radius-sm);
+      padding: 5px 10px; cursor: pointer; font-size: 11px;
+      transition: all .15s;
+    }
+    .log-controls button:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── SETTINGS ── */
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 12px; }
+    .setting-desc { font-size: 10px; color: var(--text3); margin-top: 2px; }
+    /* Toggle */
+    .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 99px; cursor: pointer; transition: .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--text3);
+      left: 2px; top: 2px; transition: .2s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent2); }
+    .toggle input:checked + .toggle-slider::before {
+      background: #000; transform: translateX(16px);
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+    .res-btn, .dur-btn {
+      flex: 1; padding: 5px 8px; border-radius: var(--radius-sm);
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text2); font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: all .15s; text-align: center;
+    }
+    .res-btn.active, .dur-btn.active {
+      background: rgba(0,210,106,0.12); border-color: var(--accent); color: var(--accent);
+    }
+    .res-btn:hover, .dur-btn:hover { border-color: var(--accent2); color: var(--text); }
+
+    /* ── FOOTER ── */
+    .footer { padding: 8px 14px; border-top: 1px solid var(--border);
+      font-size: 10px; color: var(--text3); text-align: center; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-top">
+    <div class="logo-wrap">G</div>
+    <div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="header-title">Grok Automation</span>
+        <span class="badge">v1.0.0</span>
+      </div>
+      <div class="header-sub">Control batch automation process for grok.com.</div>
+    </div>
+    <select class="lang-select" id="langSelect">
+      <option>English</option>
+      <option>Indonesian</option>
+      <option>Japanese</option>
+      <option>Chinese</option>
+    </select>
+  </div>
+  <div class="header-meta">
+    Author: <a class="author-link" href="#" target="_blank">kylenguyen.me</a>
+    <span style="margin-left:auto;font-size:10px" id="grokStatus">⚪ Not on Grok.com</span>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" data-tab="control">
+    <span class="tab-icon">⚙</span> Control
+  </div>
+  <div class="tab" data-tab="settings">
+    <span class="tab-icon">🔧</span> Setting
+  </div>
+  <div class="tab" data-tab="debug">
+    <span class="tab-icon">🔍</span> Debug Logs
+  </div>
+</div>
+
+<!-- ═══════════════════ CONTROL PANEL ═══════════════════ -->
+<div class="panel active" id="panel-control">
+
+  <!-- Mode Buttons -->
+  <div>
+    <div class="label"><span class="label-icon">🎬</span> Generation Mode</div>
+    <div class="mode-grid">
+      <button class="mode-btn active" data-mode="text-to-image">
+        <span class="mode-icon">🖼</span> Text to Image
+      </button>
+      <button class="mode-btn" data-mode="text-to-video">
+        <span class="mode-icon">🎥</span> Text to Video
+      </button>
+      <button class="mode-btn" data-mode="frame-to-video">
+        <span class="mode-icon">🎞</span> Frame to Video
+      </button>
+    </div>
+    <div class="mode-row2" style="margin-top:6px">
+      <button class="mode-btn" data-mode="image-to-image">
+        <span class="mode-icon">🔄</span> Image to Image
+      </button>
+      <button class="mode-btn" data-mode="ingredients">
+        <span class="mode-icon">🧩</span> Ingredients to Video
+      </button>
+    </div>
+  </div>
+
+  <!-- Concurrent + Delay -->
+  <div class="card">
+    <div class="card-row">
+      <div class="card-half">
+        <div class="label"><span class="label-icon">⚡</span> Concurrent Prompts</div>
+        <select id="concurrentSelect">
+          <option value="1">1 prompt</option>
+          <option value="2">2 prompts</option>
+          <option value="3">3 prompts</option>
+          <option value="5">5 prompts</option>
+        </select>
+        <div class="label-desc">Number of prompts to process simultaneously.</div>
+      </div>
+      <div class="card-half">
+        <div class="label"><span class="label-icon">⏱</span> Random Delay (s)</div>
+        <div class="delay-wrap">
+          <input type="number" id="delayMin" value="2" min="0" max="60" />
+          <span class="delay-sep">⇄</span>
+          <input type="number" id="delayMax" value="5" min="0" max="60" />
+        </div>
+        <div class="label-desc">Random wait time before the next prompt.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompts -->
+  <div>
+    <div class="prompts-header">
+      <div class="label" style="margin-bottom:0"><span class="label-icon">📝</span> Prompts</div>
+      <div class="prompts-actions">
+        <button class="icon-btn" id="importBtn" title="Import prompts from file">📂</button>
+        <button class="icon-btn" id="clearBtn" title="Clear prompts">🗑</button>
+        <button class="icon-btn" id="copyBtn" title="Copy prompts">📋</button>
+      </div>
+    </div>
+    <textarea id="promptsArea" placeholder="First prompt here.
+
+Second prompt starts after a blank line.
+
+Third prompt.
+
+...each blank line = new prompt"></textarea>
+    <div class="prompt-hint">Separate each prompt with a blank line. <span id="promptCount">0 prompts</span></div>
+  </div>
+
+  <!-- Outputs + Folder -->
+  <div class="card">
+    <div class="card-row">
+      <div class="card-half">
+        <div class="label"><span class="label-icon">📦</span> Outputs per Prompt</div>
+        <select id="outputsSelect">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+        </select>
+        <div class="label-desc">Number of images/videos to create per prompt.</div>
+      </div>
+      <div class="card-half">
+        <div class="label"><span class="label-icon">📁</span> Save to Folder</div>
+        <div class="folder-wrap">
+          <input type="text" id="folderName" value="Grok-Outputs" placeholder="Subfolder name" />
+        </div>
+        <div class="label-desc">Subfolder for downloaded files.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Options (shown only for video modes) -->
+  <div class="card" id="videoOptionsCard">
+    <div class="label"><span class="label-icon">🎬</span> Video Options</div>
+    <div class="card-row" style="gap:10px">
+      <div class="card-half">
+        <div class="label" style="font-size:10px">Resolution</div>
+        <div style="display:flex;gap:5px">
+          <button class="res-btn active" data-res="480p">480p</button>
+          <button class="res-btn" data-res="720p">720p</button>
+        </div>
+      </div>
+      <div class="card-half">
+        <div class="label" style="font-size:10px">Duration</div>
+        <div style="display:flex;gap:5px">
+          <button class="dur-btn active" data-dur="6s">6s</button>
+          <button class="dur-btn" data-dur="10s">10s</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress (hidden until running) -->
+  <div class="progress-card" id="progressCard">
+    <div class="status-row">
+      <div class="status-dot green" id="statusDot"></div>
+      <span class="status-text" id="statusText">Initializing...</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="progress-stats">
+      <span id="progressDone">0 done</span>
+      <span id="progressTotal">of 0</span>
+      <span id="progressPct">0%</span>
+    </div>
+  </div>
+
+  <!-- Start/Stop Button -->
+  <button class="start-btn idle" id="startBtn">
+    <span>▶</span> <span id="startLabel">Start Automation</span>
+  </button>
+
+</div>
+
+<!-- ═══════════════════ SETTINGS PANEL ═══════════════════ -->
+<div class="panel" id="panel-settings">
+  <div class="card">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Auto-download outputs</div>
+        <div class="setting-desc">Automatically download generated files.</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="settingAutoDownload" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Skip failed prompts</div>
+        <div class="setting-desc">Continue to next prompt if one fails.</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="settingSkipFailed" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Open Grok tab automatically</div>
+        <div class="setting-desc">Open grok.com if no active tab found.</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="settingAutoOpen" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Verbose debug logging</div>
+        <div class="setting-desc">Log all automation steps in Debug tab.</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="settingVerbose" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Wait timeout (seconds)</div>
+        <div class="setting-desc">Max wait time for generation to complete.</div>
+      </div>
+      <input type="number" id="settingTimeout" value="120" min="30" max="600"
+        style="width:70px;text-align:center;margin-left:auto" />
+    </div>
+  </div>
+  <div class="card" style="gap:8px;display:flex;flex-direction:column">
+    <div class="label">💾 Data Management</div>
+    <button class="icon-btn" style="width:100%;padding:8px;font-size:12px" id="exportSettingsBtn">
+      📤 Export Settings & Prompts
+    </button>
+    <button class="icon-btn" style="width:100%;padding:8px;font-size:12px" id="clearStorageBtn">
+      🗑 Clear All Saved Data
+    </button>
+  </div>
+  <div style="font-size:10px;color:var(--text3);text-align:center;padding:4px 0">
+    Grok Automation v1.0.0 · Built for grok.com
+  </div>
+</div>
+
+<!-- ═══════════════════ DEBUG LOGS PANEL ═══════════════════ -->
+<div class="panel" id="panel-debug">
+  <div class="log-controls">
+    <button id="clearLogsBtn">🗑 Clear</button>
+    <button id="copyLogsBtn">📋 Copy</button>
+    <button id="exportLogsBtn">💾 Export</button>
+  </div>
+  <div class="log-box" id="logBox">
+    <div class="log-entry">
+      <span class="log-time">[00:00:00]</span>
+      <span class="log-info">Grok Automation ready. Open grok.com to begin.</span>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Grok Automation · Open Source · For grok.com</div>
+
+<script src="side-panel.js"></script>
+</body>
+</html>
