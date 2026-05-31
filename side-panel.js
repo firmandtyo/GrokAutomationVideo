@@ -57,6 +57,21 @@ function applyStateToUI() {
   document.querySelectorAll('.mode-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.mode === state.mode);
   });
+
+  // Show/hide video options based on current mode
+  const isVideo = ['text-to-video', 'frame-to-video', 'ingredients'].includes(state.mode);
+  document.getElementById('videoOptionsCard').style.display = isVideo ? 'block' : 'none';
+
+  // Video resolution buttons
+  document.querySelectorAll('.res-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.res === state.videoRes);
+  });
+
+  // Video duration buttons
+  document.querySelectorAll('.dur-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.dur === state.videoDur);
+  });
+
   updatePromptCount();
 }
 
@@ -880,32 +895,89 @@ function injectGrokPrompt(prompt, mode, outputIndex, timeoutMs, autoDownload, fo
     }
 
     // ── Select generation mode (Image or Video) ──
-    // aria-label="Generation mode" radiogroup
+    // Grok uses radiogroup for mode selection — try multiple selectors
     async function selectMode(mode) {
-      const radioGroup = document.querySelector('[role="radiogroup"][aria-label="Generation mode"]');
-      if (!radioGroup) return;
-
       const isVideo = mode === 'text-to-video' || mode === 'frame-to-video' || mode === 'ingredients';
-      const targetLabel = isVideo ? null : 'Image'; // null = Video (second button)
 
-      const radios = [...radioGroup.querySelectorAll('button[role="radio"]')];
-      // First button = Image, Second button = Video
-      const targetBtn = isVideo ? radios[1] : radios[0];
-      if (targetBtn && targetBtn.getAttribute('aria-checked') !== 'true') {
+      // Try finding the radio group for mode selection
+      let radioGroup = document.querySelector('[role="radiogroup"][aria-label="Generation mode"]');
+
+      // Fallback: any radiogroup near the top of the page
+      if (!radioGroup) {
+        radioGroup = document.querySelector('[role="radiogroup"]');
+      }
+
+      if (radioGroup) {
+        const radios = [...radioGroup.querySelectorAll('button[role="radio"]')];
+        if (radios.length >= 2) {
+          // First button = Image, Second button = Video
+          const targetBtn = isVideo ? radios[1] : radios[0];
+          if (targetBtn && targetBtn.getAttribute('aria-checked') !== 'true') {
+            targetBtn.click();
+            await sleep(500);
+          }
+          return;
+        }
+      }
+
+      // Alternative: look for tab-like buttons with text "Image" / "Video"
+      const allButtons = [...document.querySelectorAll('button')];
+      const videoBtn = allButtons.find(b => {
+        const text = b.textContent.trim().toLowerCase();
+        return text === 'video' || text.includes('video');
+      });
+      const imageBtn = allButtons.find(b => {
+        const text = b.textContent.trim().toLowerCase();
+        return text === 'image' || text.includes('image');
+      });
+
+      const targetBtn = isVideo ? videoBtn : imageBtn;
+      if (targetBtn) {
         targetBtn.click();
-        await sleep(300);
+        await sleep(500);
       }
     }
 
     // ── Submit button: button[type="submit"][aria-label="Submit"] ──
+    // Grok.com may change selectors — try multiple patterns
     function findSubmitBtn() {
-      return (
-        document.querySelector('button[type="submit"][aria-label="Submit"]') ||
-        document.querySelector('button[type="submit"]') ||
-        [...document.querySelectorAll('button')].find(b =>
-          (b.getAttribute('aria-label') || '').toLowerCase().includes('submit') && !b.disabled
-        )
-      );
+      // Method 1: Standard selectors
+      let btn = document.querySelector('button[type="submit"][aria-label="Submit"]');
+      if (btn) return btn;
+
+      btn = document.querySelector('button[type="submit"]');
+      if (btn) return btn;
+
+      // Method 2: aria-label contains submit/send
+      btn = [...document.querySelectorAll('button')].find(b => {
+        const label = (b.getAttribute('aria-label') || '').toLowerCase();
+        return (label.includes('submit') || label.includes('send') || label.includes('generate')) && !b.disabled;
+      });
+      if (btn) return btn;
+
+      // Method 3: Button with send/arrow SVG icon near the editor
+      const editor = document.querySelector('[data-testid="chat-input"]') ||
+                     document.querySelector('div.ProseMirror[contenteditable="true"]')?.closest('form') ||
+                     document.querySelector('div[contenteditable="true"]')?.closest('form');
+      if (editor) {
+        const form = editor.closest('form') || editor.parentElement?.closest('form');
+        if (form) {
+          btn = form.querySelector('button[type="submit"]') || form.querySelector('button:last-of-type');
+          if (btn) return btn;
+        }
+      }
+
+      // Method 4: Any button with SVG that looks like a send button (arrow icon)
+      btn = [...document.querySelectorAll('button')].find(b => {
+        const svg = b.querySelector('svg');
+        if (!svg) return false;
+        const rect = b.getBoundingClientRect();
+        // Submit button is typically small (30-60px) and near bottom-right
+        return rect.width > 20 && rect.width < 80 && rect.bottom > window.innerHeight * 0.7;
+      });
+      if (btn) return btn;
+
+      return null;
     }
 
     // ── Count generated media (to detect NEW items after generation) ──
