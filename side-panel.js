@@ -815,8 +815,7 @@ function injectGrokPrompt(prompt, mode, outputIndex, timeoutMs, autoDownload, fo
           await sleep(200);
 
           // Verify
-          const val = editor.innerText.replace(/
-/g, '').trim();
+          const val = editor.innerText.replace(/\n/g, '').trim();
           return val.length > 0;
         } catch (e) {
           return false;
@@ -847,8 +846,7 @@ function injectGrokPrompt(prompt, mode, outputIndex, timeoutMs, autoDownload, fo
           }));
           await sleep(200);
 
-          const val = editor.innerText.replace(/
-/g, '').trim();
+          const val = editor.innerText.replace(/\n/g, '').trim();
           return val.length > 0;
         } catch (e) {
           return false;
