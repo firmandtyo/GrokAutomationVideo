@@ -304,33 +304,189 @@ async function findOrOpenGrokTab() {
 }
 
 // Navigate tab to /imagine using scripting injection (most reliable)
-// chrome.tabs.update same-URL navigation often doesn't fire onUpdated
-async function navigateToImagine(tabId) {
+// Includes retry logic, connection-loss detection, and editor verification
+async function navigateToImagine(tabId, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Step 0: Verify the tab still exists
+      let tabInfo;
+      try {
+        tabInfo = await chrome.tabs.get(tabId);
+      } catch (e) {
+        log('error', `Tab ${tabId} no longer exists.`);
+        throw new Error('Tab closed');
+      }
+
+      // Step 1: Force full page reload to /imagine
+      // Using chrome.tabs.update is more reliable than executeScript for navigation
+      // because executeScript can fail if the page is in a broken/disconnected state
+      log('info', `[Attempt ${attempt}/${maxRetries}] Navigating to /imagine...`);
+
+      try {
+        // First try executeScript (works when page is responsive)
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => { window.location.href = 'https://grok.com/imagine'; }
+        });
+      } catch (scriptErr) {
+        // If executeScript fails, the page is likely in a broken state
+        // Use chrome.tabs.update as fallback (always works)
+        log('warn', `executeScript failed (${scriptErr.message}), using tabs.update fallback`);
+        await chrome.tabs.update(tabId, { url: 'https://grok.com/imagine' });
+      }
+
+      // Step 2: Wait for the tab to start navigating
+      await sleep(800);
+
+      // Step 3: Wait for tab to finish loading (with generous timeout)
+      await waitForTabLoad(tabId, 15000);
+
+      // Step 4: Extra wait for React/TipTap editor to mount
+      await sleep(3000);
+
+      // Step 5: Verify page is actually ready by checking for the editor
+      const editorReady = await verifyEditorReady(tabId);
+
+      if (editorReady) {
+        log('info', 'Tab ready at grok.com/imagine');
+        return; // Success!
+      }
+
+      // Editor not found — check if page has connection error
+      const hasError = await checkPageForErrors(tabId);
+      if (hasError) {
+        log('warn', `Connection loss detected on attempt ${attempt}. Force reloading...`);
+        // Force a hard reload
+        await chrome.tabs.update(tabId, { url: 'https://grok.com/imagine' });
+        await sleep(1000);
+        await waitForTabLoad(tabId, 15000);
+        await sleep(4000);
+
+        // Check editor again after hard reload
+        const retryReady = await verifyEditorReady(tabId);
+        if (retryReady) {
+          log('info', 'Tab recovered after reload');
+          return;
+        }
+      }
+
+      // If we're not on the last attempt, wait before retrying
+      if (attempt < maxRetries) {
+        const waitTime = attempt * 3000; // Increasing backoff: 3s, 6s, 9s
+        log('warn', `Editor not ready. Retrying in ${waitTime / 1000}s...`);
+        await sleep(waitTime);
+      }
+
+    } catch (err) {
+      if (err.message === 'Tab closed') throw err;
+      log('warn', `navigateToImagine attempt ${attempt} error: ${err.message}`);
+      if (attempt < maxRetries) {
+        await sleep(3000);
+      }
+    }
+  }
+
+  // All retries exhausted — last resort: force navigate and hope for the best
+  log('warn', 'All navigation retries exhausted. Forcing final reload...');
   try {
-    // Step 1: Use executeScript to force window.location change INSIDE the tab
-    // This works even when URL is already /imagine (forces a reload)
-    await chrome.scripting.executeScript({
+    await chrome.tabs.update(tabId, { url: 'https://grok.com/imagine' });
+    await sleep(2000);
+    await waitForTabLoad(tabId, 15000);
+    await sleep(5000);
+  } catch (_) {}
+}
+
+// Verify that the TipTap editor is present and ready in the tab
+async function verifyEditorReady(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => { window.location.href = 'https://grok.com/imagine'; }
+      func: () => {
+        // Check for the editor element
+        const editor =
+          document.querySelector('[data-testid="chat-input"] div[contenteditable="true"]') ||
+          document.querySelector('div.ProseMirror[contenteditable="true"]') ||
+          document.querySelector('div.tiptap[contenteditable="true"]') ||
+          document.querySelector('div[contenteditable="true"][data-placeholder]') ||
+          [...document.querySelectorAll('div[contenteditable="true"]')].find(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 200 && rect.height > 10;
+          });
+
+        if (!editor) return { ready: false, reason: 'editor_not_found' };
+
+        // Also check that submit button exists
+        const submitBtn =
+          document.querySelector('button[type="submit"][aria-label="Submit"]') ||
+          document.querySelector('button[type="submit"]');
+
+        if (!submitBtn) return { ready: false, reason: 'submit_not_found' };
+
+        return { ready: true };
+      }
     });
 
-    // Step 2: Wait for the tab to start navigating (short grace period)
-    await sleep(500);
+    if (results && results[0] && results[0].result) {
+      const { ready, reason } = results[0].result;
+      if (!ready) {
+        log('warn', `Page not ready: ${reason}`);
+      }
+      return ready;
+    }
+    return false;
+  } catch (e) {
+    log('warn', `verifyEditorReady failed: ${e.message}`);
+    return false;
+  }
+}
 
-    // Step 3: Wait for tab to finish loading (with hard timeout)
-    await waitForTabLoad(tabId, 12000);
+// Check if the page has connection errors or error states
+async function checkPageForErrors(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const bodyText = document.body?.innerText || '';
+        // Common Grok connection error indicators
+        const errorPatterns = [
+          'something went wrong',
+          'failed to fetch',
+          'network error',
+          'connection lost',
+          'try again',
+          'reload',
+          'server error',
+          'too many requests',
+          'rate limit',
+          'unable to connect',
+          'ERR_',
+          'terjadi kesalahan',
+        ];
+        const lowerBody = bodyText.toLowerCase();
+        for (const pattern of errorPatterns) {
+          if (lowerBody.includes(pattern.toLowerCase())) {
+            return { hasError: true, pattern };
+          }
+        }
+        // Also check if the page is basically empty (failed to load)
+        if (document.body && document.body.children.length < 3) {
+          return { hasError: true, pattern: 'empty_page' };
+        }
+        return { hasError: false };
+      }
+    });
 
-    // Step 4: Extra wait for React/TipTap editor to mount
-    await sleep(2500);
-
-    log('info', 'Tab ready at grok.com/imagine');
-  } catch (err) {
-    log('warn', 'navigateToImagine fallback: ' + err.message);
-    // Last resort: force navigate via tabs.update then just wait fixed time
-    try {
-      await chrome.tabs.update(tabId, { url: 'https://grok.com/imagine' });
-    } catch(_) {}
-    await sleep(5000);
+    if (results && results[0] && results[0].result) {
+      if (results[0].result.hasError) {
+        log('warn', `Page error detected: "${results[0].result.pattern}"`);
+      }
+      return results[0].result.hasError;
+    }
+    return false;
+  } catch (e) {
+    // If we can't even run a script, the page is definitely broken
+    log('warn', `checkPageForErrors failed (page likely broken): ${e.message}`);
+    return true;
   }
 }
 
@@ -396,7 +552,7 @@ async function startAutomation() {
     return;
   }
 
-  const tab = await findOrOpenGrokTab();
+  let tab = await findOrOpenGrokTab();
   if (!tab) {
     log('error', 'No grok.com tab found and auto-open is disabled.');
     return;
@@ -432,7 +588,31 @@ async function startAutomation() {
           log('info', `Output ${o + 1}/${state.outputsPerPrompt} for prompt ${i + 1}`);
           await randomDelay();
         }
-        await runPromptOnTab(tab.id, prompt, state.mode, o, state.videoRes, state.videoDur);
+
+        // Attempt to run the prompt, with one retry on submit-not-found
+        let lastErr = null;
+        for (let retryRun = 0; retryRun < 2; retryRun++) {
+          try {
+            await runPromptOnTab(tab.id, prompt, state.mode, o, state.videoRes, state.videoDur);
+            lastErr = null;
+            break; // success
+          } catch (runErr) {
+            lastErr = runErr;
+            // If submit button not found or editor not found, try re-navigating
+            if (runErr.message.includes('Submit tidak ditemukan') ||
+                runErr.message.includes('Editor') ||
+                runErr.message.includes('tidak ditemukan')) {
+              if (retryRun === 0) {
+                log('warn', `${runErr.message} — Re-navigating to /imagine and retrying...`);
+                await navigateToImagine(tab.id);
+                await sleep(2000);
+              }
+            } else {
+              break; // Other errors, don't retry
+            }
+          }
+        }
+        if (lastErr) throw lastErr;
       }
       done++;
       log('success', `✓ Prompt ${i + 1} completed`);
@@ -453,8 +633,52 @@ async function startAutomation() {
       // Navigate back to /imagine before next prompt
       setStatus(`[${i+2}/${prompts.length}] Navigating to grok.com/imagine...`);
       log('info', `Navigating to /imagine for prompt ${i+2}...`);
-      await navigateToImagine(tab.id);
-      log('success', `Ready for prompt ${i+2}`);
+
+      try {
+        await navigateToImagine(tab.id);
+
+        // Double-check: verify editor is actually ready before proceeding
+        const ready = await verifyEditorReady(tab.id);
+        if (!ready) {
+          log('warn', 'Editor still not ready after navigation. Waiting extra 5s...');
+          await sleep(5000);
+          const readyRetry = await verifyEditorReady(tab.id);
+          if (!readyRetry) {
+            log('error', 'Editor not available. Attempting full page reload...');
+            await chrome.tabs.update(tab.id, { url: 'https://grok.com/imagine' });
+            await sleep(2000);
+            await waitForTabLoad(tab.id, 15000);
+            await sleep(5000);
+          }
+        }
+
+        log('success', `Ready for prompt ${i+2}`);
+      } catch (navErr) {
+        if (navErr.message === 'Tab closed') {
+          log('error', 'Grok tab was closed! Attempting to reopen...');
+          const newTab = await findOrOpenGrokTab();
+          if (newTab) {
+            tab = newTab;
+            log('info', 'Reopened Grok tab');
+            await sleep(3000);
+          } else {
+            log('error', 'Cannot reopen Grok tab. Stopping.');
+            break;
+          }
+        } else {
+          log('error', `Navigation failed: ${navErr.message}. Attempting recovery...`);
+          // Try one more time with a fresh page load
+          try {
+            await chrome.tabs.update(tab.id, { url: 'https://grok.com/imagine' });
+            await sleep(2000);
+            await waitForTabLoad(tab.id, 15000);
+            await sleep(5000);
+          } catch (_) {
+            log('error', 'Recovery failed. Stopping.');
+            break;
+          }
+        }
+      }
     }
   }
 
